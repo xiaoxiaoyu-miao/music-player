@@ -92,6 +92,8 @@
   .seg button:not(.on):hover{color:var(--fg);background:rgba(255,255,255,.07)}
   .seg-label{font-size:10.5px;color:var(--faint);padding:0 4px 0 7px;letter-spacing:.4px}
   body[data-subs="0"] #subSeg{display:none}
+  body[data-haszh="0"] #subSeg button[data-sub="zh"]{display:none}
+  body[data-hasro="0"] #subSeg button[data-sub="ro"]{display:none}
 
   /* ---------- 主体 ---------- */
   .stage{flex:1 1 auto;min-height:0;display:grid;grid-template-rows:1fr;position:relative}
@@ -685,7 +687,6 @@
     $("mTags").textContent = "";
     $("mTags").appendChild(frag);
 
-    document.body.dataset.subs = t.subs && t.subs.length ? "1" : "0";
     applySub();
     document.title = t.title + " — " + t.artist;
     if ("mediaSession" in navigator && window.MediaMetadata){
@@ -937,19 +938,39 @@
   $("brand").addEventListener("click", toggleSheet);
 
   /* ==================== 副行与视图 ==================== */
+  function subKeys(t){ return (t.subs || []).map(function(s){ return s.key; }); }
+  function subName(k){
+    return k === "zh" ? "副行：中文翻译" : k === "ro" ? "副行：罗马音" : "副行：已关闭";
+  }
+  /* 按当前曲目实际拥有的副行类型自适应：没有罗马音就隐藏罗马音按钮 */
   function applySub(){
-    var t = curTrack();
-    document.body.dataset.sub = (t.subs && t.subs.length) ? subPref : "off";
+    var t = curTrack(), keys = subKeys(t), mode;
+    if (!keys.length || subPref === "off") mode = "off";
+    else if (keys.indexOf(subPref) < 0)     mode = keys[0];
+    else                                    mode = subPref;
+    document.body.dataset.sub   = mode;
+    document.body.dataset.subs  = keys.length ? "1" : "0";
+    document.body.dataset.haszh = keys.indexOf("zh") >= 0 ? "1" : "0";
+    document.body.dataset.hasro = keys.indexOf("ro") >= 0 ? "1" : "0";
     var btns = document.querySelectorAll("#subSeg button");
     for (var i = 0; i < btns.length; i++)
-      btns[i].classList.toggle("on", btns[i].getAttribute("data-sub") === document.body.dataset.sub);
+      btns[i].classList.toggle("on", btns[i].getAttribute("data-sub") === mode);
+  }
+  function cycleSub(){
+    var keys = subKeys(curTrack());
+    if (!keys.length){ showToast("本曲目没有副行歌词"); return; }
+    var order = keys.concat(["off"]);
+    var i = order.indexOf(document.body.dataset.sub);
+    subPref = order[(i + 1) % order.length];
+    applySub(); persist();
+    showToast(subName(document.body.dataset.sub));
   }
   $("subSeg").addEventListener("click", function(e){
     var b = e.target.closest ? e.target.closest("button") : null;
     if (!b) return;
     subPref = b.getAttribute("data-sub");
     applySub();
-    showToast(subPref === "zh" ? "副行：中文翻译" : subPref === "ro" ? "副行：罗马音" : "副行：已关闭");
+    showToast(subName(document.body.dataset.sub));
     persist();
   });
 
@@ -1040,12 +1061,7 @@
     else if (k === "n" || k === "N"){ nextTrack(true); }
     else if (k === "Tab"){ e.preventDefault(); toggleSheet(); }
     else if (k === "Escape"){ closeSheet(); }
-    else if (k === "t" || k === "T"){
-      var order = ["zh", "ro", "off"];
-      subPref = order[(order.indexOf(subPref) + 1) % 3];
-      applySub(); persist();
-      showToast("副行：" + (subPref === "zh" ? "中文翻译" : subPref === "ro" ? "罗马音" : "已关闭"));
-    }
+    else if (k === "t" || k === "T"){ cycleSub(); }
     else if (k === "c" || k === "C"){ setView(document.body.dataset.view === "lyrics" ? "cover" : "lyrics"); }
   });
 
